@@ -6,6 +6,6 @@ fn main() {
 mod tests {
     #[test]
     fn exploration() {
-        assert_eq!(2 + 2, 5);
+        assert_eq!(2 + 2, 4);
     }
 }
