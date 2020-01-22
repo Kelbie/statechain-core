@@ -32,17 +32,3 @@ fn main() {
     // apiHandle.join();
 
 }
-
-mod tests {
-    use std::io::prelude::*;
-    use std::net::TcpStream;
-
-    #[test]
-    fn connect_to_port() -> std::io::Result<()> {
-        let mut stream = TcpStream::connect("127.0.0.1:9939")?;
-
-        // stream.write(&[1])?;
-        // stream.read(&mut [0; 128])?;
-        Ok(())
-    }
-}
