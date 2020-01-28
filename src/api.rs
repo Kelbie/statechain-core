@@ -1,6 +1,6 @@
 use std::thread;
 use std::sync::mpsc;
-use actix_web::{guard, web, App, HttpResponse, HttpServer, HttpRequest, Responder};
+use actix_web::{guard, web, App, HttpResponse, HttpServer, HttpRequest, Responder, Result};
 use ini::Ini;
 
 use crossbeam_channel::{bounded, Sender};
@@ -14,19 +14,21 @@ pub struct TransferMessage {
     to: String
 }
 
-pub fn init(req: HttpRequest) -> impl Responder {
-    let name = req.match_info().get("name").unwrap_or("World");
-    format!("Hello {}!", &name)
+#[derive(Deserialize, Debug)]
+pub struct InitMessage {
+    to: String
 }
 
-pub fn transfer(sender: web::Data<Sender<u64>>, req: HttpRequest, item: web::Json<TransferMessage>) -> impl Responder {
+pub fn init(req: HttpRequest, item: web::Json<InitMessage>) -> Result<String> {
     println!("model: {:?}", &item);
     
-    
-    sender.send(1);
+    Ok(format!("to: {}", item.to))
+}
 
-    let name = req.match_info().get("name").unwrap_or("World");
-    format!("Hello {}!", &name)
+pub fn transfer(sender: web::Data<Sender<u64>>, req: HttpRequest, item: web::Json<TransferMessage>) -> Result<String> {
+    println!("model: {:?}", &item);
+    
+    Ok(format!("blindedMessage {}, signature: {}, to: {}", item.blindedMessage, item.signature, item.to))
 }
 
 pub fn main(sender: Sender<u64>) {
@@ -43,6 +45,7 @@ pub fn main(sender: Sender<u64>) {
                 // enable logger
                 // .wrap(middleware::Logger::default())
                 // register simple handler, handle all methods
+                .service(web::resource("/init").route(web::post().to(init)))
                 .service(web::resource("/transfer").route(web::post().to(transfer)))
         })
         .bind(format!("127.0.0.1:{}", port))
