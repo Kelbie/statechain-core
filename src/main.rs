@@ -1,8 +1,6 @@
 use std::thread;
 use std::sync::mpsc;
-use std::net::{TcpListener, TcpStream, Shutdown};
-use std::io::{Read, Write};
-use ini::Ini;
+use std::env;
 
 extern crate crossbeam;
 #[macro_use]
@@ -13,21 +11,19 @@ use crossbeam_channel::{bounded, Sender};
 mod api;
 mod network;
 
-
 fn main() {
-    // database::main();
-
-    // let (s, r) = bounded(0);
+    let (s, r) = bounded(0);
     
-    // let apiHandle = thread::spawn(move || {
-    //     api::main(s);
-    // });
-
-    let networkHandle = thread::spawn(move || {
-        network::main();
+    // thread for rest api
+    let api_handle = thread::spawn(move || {
+        api::main(s);
     });
     
-    networkHandle.join();
-    // apiHandle.join();
+    // thread for peer-to-peer networking
+    let network_handle = thread::spawn(move || {
+        network::main();
+    });
 
+    api_handle.join();
+    network_handle.join();
 }
