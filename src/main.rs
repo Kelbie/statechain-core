@@ -11,7 +11,6 @@ extern crate crossbeam_channel;
 use crossbeam_channel::{bounded, Sender};
 
 mod api;
-mod database;
 mod network;
 
 
