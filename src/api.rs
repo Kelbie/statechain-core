@@ -1,4 +1,5 @@
 use std::thread;
+use std::env;
 use std::sync::mpsc;
 use actix_web::{guard, web, App, HttpResponse, HttpServer, HttpRequest, Responder, Result};
 use ini::Ini;
@@ -7,34 +8,55 @@ use sha2::{Sha256, Sha512, Digest};
 use std::str;
 use bitcoin_hashes::{sha256, Hash};
 use bitcoin_hashes::hex::{FromHex, ToHex};
+use std::net::TcpStream;
 
 use crossbeam_channel::{bounded, Sender};
 use json::JsonValue;
 use serde::{Serialize, Deserialize};
+use std::io::prelude::*;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferMessage {
-    blindedMessage: String,
+    blinded_message: String,
     signature: String,
-    to: String
+    receiver: String
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct InitMessage {
-    to: String
+    receiver: String
+}
+
+fn send_to_peers(encoded_message: &Vec<u8>) -> std::io::Result<()> {
+    let args: Vec<String> = env::args().collect();
+    
+    let conf = Ini::load_from_file(args.get(1).unwrap()).unwrap();
+    
+    let section = conf.section(Some("network").to_owned()).unwrap();
+
+    let peers = section.get_vec("network.peers[]").unwrap();
+
+    for peer in peers {
+        let mut stream = TcpStream::connect(peer).unwrap();
+        println!("{:?}", &encoded_message);
+        stream.write(&encoded_message).unwrap();
+    }
+
+    Ok(())
 }
 
 pub fn getTransferById(sender: web::Data<Sender<u64>>, transfer_id: web::Path<String>, req: HttpRequest, item: web::Json<TransferMessage>) -> Result<String> {
     
-    let path = "/Users/kevinkelbie/Documents/GitHub/statechain-core/src/db";
+    let args: Vec<String> = env::args().collect();
+    let path = String::from("/Users/kevinkelbie/Documents/GitHub/statechain-core/src/") + args.get(2).unwrap();
     let db = DB::open_default(path).unwrap();
-    let decodedTransferMessage = match db.get(String::from(transfer_id.as_ref())) {
+    let decoded_transfer_message = match db.get(String::from(transfer_id.as_ref())) {
         Ok(Some(value)) => bincode::deserialize(&value[..]).unwrap(),
         Ok(None) => println!("value not found"),
         Err(e) => println!("operational problem encountered: {}", e)
     };
 
-    println!("{:?}", decodedTransferMessage);
+    println!("{:?}", decoded_transfer_message);
 
     Ok(format!("{}", transfer_id))
 }
@@ -42,41 +64,46 @@ pub fn getTransferById(sender: web::Data<Sender<u64>>, transfer_id: web::Path<St
 
 pub fn init(sender: web::Data<Sender<u64>>, req: HttpRequest, item: web::Json<InitMessage>) -> Result<String> {
     let initMessage = InitMessage {
-        to: String::from(&item.to),
+        receiver: String::from(&item.receiver),
     };
 
     // encode struct as vector
-    let encodedInitMessage = bincode::serialize(&initMessage).unwrap();
+    let encoded_init_message = bincode::serialize(&initMessage).unwrap();
 
     // get sha256 digest of vector
-    let digest = sha256::Hash::hash(encodedInitMessage.as_ref());
+    let digest = sha256::Hash::hash(encoded_init_message.as_ref());
 
     // save encoded message with digest as key
-    let path = "/Users/kevinkelbie/Documents/GitHub/statechain-core/src/db";
+    let args: Vec<String> = env::args().collect();
+    let path = String::from("/Users/kevinkelbie/Documents/GitHub/statechain-core/src/") + args.get(2).unwrap();
     let db = DB::open_default(path).unwrap();
-    db.put(String::from(digest.to_hex()), encodedInitMessage).unwrap();
+    db.put(String::from(digest.to_hex()), &encoded_init_message).unwrap();
+
+    // tell peers about the transfer
+    send_to_peers(&encoded_init_message);
 
     // return digest
     Ok(format!("{}", digest.to_hex()))
 }
 
 pub fn transfer(sender: web::Data<Sender<u64>>, req: HttpRequest, item: web::Json<TransferMessage>) -> Result<String> {
-    let transferMessage = TransferMessage {
-        blindedMessage: String::from(&item.blindedMessage),
+    let transfer_message = TransferMessage {
+        blinded_message: String::from(&item.blinded_message),
         signature: String::from(&item.signature),
-        to: String::from(&item.to)
+        receiver: String::from(&item.receiver)
     };
 
     // encode struct as vector
-    let encodedInitMessage = bincode::serialize(&transferMessage).unwrap();
+    let encoded_init_message = bincode::serialize(&transfer_message).unwrap();
 
     // get sha256 digest of vector
-    let digest = sha256::Hash::hash(encodedInitMessage.as_ref());
+    let digest = sha256::Hash::hash(encoded_init_message.as_ref());
 
     // save encoded message with digest as key
-    let path = "/Users/kevinkelbie/Documents/GitHub/statechain-core/src/db";
+    let args: Vec<String> = env::args().collect();
+    let path = String::from("/Users/kevinkelbie/Documents/GitHub/statechain-core/src/") + args.get(2).unwrap();
     let db = DB::open_default(path).unwrap();
-    db.put(String::from(digest.to_hex()), encodedInitMessage).unwrap();
+    db.put(String::from(digest.to_hex()), encoded_init_message).unwrap();
 
     // return digest
     Ok(format!("{}", digest.to_hex()))
@@ -84,11 +111,13 @@ pub fn transfer(sender: web::Data<Sender<u64>>, req: HttpRequest, item: web::Jso
 
 pub fn main(sender: Sender<u64>) {
     let handle = thread::spawn(move || {
-        let conf = Ini::load_from_file("statechain.conf").unwrap();
+        let args: Vec<String> = env::args().collect();
+
+        let conf = Ini::load_from_file(args.get(1).unwrap()).unwrap();
     
-        let section = conf.section(None::<String>).unwrap();
+        let section = conf.section(Some("api").to_owned()).unwrap();
     
-        let port = section.get("port").unwrap();
+        let port = section.get("api.port").unwrap();
 
         HttpServer::new(move || {
             App::new()
