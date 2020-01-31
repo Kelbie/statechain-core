@@ -48,3 +48,5 @@ TCP was used instead of UDP because we want all the members in the federation to
 # Why Rust?
 
 Safety, Speed, and Concurrency
+
+Node.js v12.x

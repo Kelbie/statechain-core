@@ -2,6 +2,7 @@ use std::thread;
 use std::env;
 use std::sync::mpsc;
 use actix_web::{guard, web, App, HttpResponse, HttpServer, HttpRequest, Responder, Result};
+use actix_web::web::Json;
 use ini::Ini;
 use rocksdb::{DB, Options};
 use sha2::{Sha256, Sha512, Digest};
@@ -16,15 +17,32 @@ use serde::{Serialize, Deserialize};
 use std::io::prelude::*;
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct InitResponse {
+    public_key: String
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TransferResponse {
+    signed_blinded_message: String
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct StatechainMessage {
+    public_key: String,
+    transfers: Vec<TransferMessage>
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct TransferMessage {
+    from: String,
     blinded_message: String,
     signature: String,
-    receiver: String
+    to: String
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct InitMessage {
-    receiver: String
+    to: String
 }
 
 fn send_to_peers(encoded_message: &Vec<u8>) -> std::io::Result<()> {
@@ -45,7 +63,7 @@ fn send_to_peers(encoded_message: &Vec<u8>) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn getTransferById(sender: web::Data<Sender<u64>>, transfer_id: web::Path<String>, req: HttpRequest, item: web::Json<TransferMessage>) -> Result<String> {
+pub fn getTransferById(transfer_id: web::Path<String>, req: HttpRequest, item: web::Json<TransferMessage>) -> Result<String> {
     
     let args: Vec<String> = env::args().collect();
     let path = String::from("/Users/kevinkelbie/Documents/GitHub/statechain-core/src/") + args.get(2).unwrap();
@@ -62,9 +80,9 @@ pub fn getTransferById(sender: web::Data<Sender<u64>>, transfer_id: web::Path<St
 }
 
 
-pub fn init(sender: web::Data<Sender<u64>>, req: HttpRequest, item: web::Json<InitMessage>) -> Result<String> {
+pub fn init(req: HttpRequest, item: web::Json<InitMessage>) -> Result<web::Json<InitResponse>> {
     let initMessage = InitMessage {
-        receiver: String::from(&item.receiver),
+        to: String::from(&item.to),
     };
 
     // encode struct as vector
@@ -82,15 +100,20 @@ pub fn init(sender: web::Data<Sender<u64>>, req: HttpRequest, item: web::Json<In
     // tell peers about the transfer
     send_to_peers(&encoded_init_message);
 
+    let init_response = InitResponse {
+        public_key: String::from("public_key")
+    };
+
     // return digest
-    Ok(format!("{}", digest.to_hex()))
+    Ok(web::Json(init_response))
 }
 
-pub fn transfer(sender: web::Data<Sender<u64>>, req: HttpRequest, item: web::Json<TransferMessage>) -> Result<String> {
+pub fn transfer(req: HttpRequest, item: web::Json<TransferMessage>) -> Result<web::Json<TransferResponse>> {
     let transfer_message = TransferMessage {
+        from: String::from(&item.from),
         blinded_message: String::from(&item.blinded_message),
         signature: String::from(&item.signature),
-        receiver: String::from(&item.receiver)
+        to: String::from(&item.to)
     };
 
     // encode struct as vector
@@ -106,10 +129,14 @@ pub fn transfer(sender: web::Data<Sender<u64>>, req: HttpRequest, item: web::Jso
     db.put(String::from(digest.to_hex()), encoded_init_message).unwrap();
 
     // return digest
-    Ok(format!("{}", digest.to_hex()))
+    let transfer_response = TransferResponse {
+        signed_blinded_message: String::from("signed_blinded_message")
+    };
+
+    Ok(web::Json(transfer_response))
 }
 
-pub fn main(sender: Sender<u64>) {
+pub fn main(s: Sender<u64>) {
     let handle = thread::spawn(move || {
         let args: Vec<String> = env::args().collect();
 
@@ -121,7 +148,7 @@ pub fn main(sender: Sender<u64>) {
 
         HttpServer::new(move || {
             App::new()
-                .register_data(web::Data::new(sender.clone())) // Pass the sender to the service
+                .register_data(web::Data::new(s.clone())) // Pass the sender to the service
                 // enable logger
                 // .wrap(middleware::Logger::default())
                 // register simple handler, handle all methods
