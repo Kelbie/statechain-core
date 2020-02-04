@@ -16,18 +16,21 @@ use serde::{Serialize, Deserialize};
 pub struct TransferMessage {
     blinded_message: String,
     signature: String,
-    receiver: String
+    to: String
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct InitMessage {
-    receiver: String
+    to: String
 }
 
 fn handle_client(mut stream: TcpStream) {
-    let mut data = [0 as u8; 500]; // using 50 byte buffer
+    let mut data = [0 as u8; 32]; // using 50 byte buffer
+    stream.read(&mut data);
     
-    println!("{:?}", stream.read(&mut data));
+    let message: InitMessage = bincode::deserialize(&data[..]).unwrap();
+
+    println!("TCP {:?}", message);
 
     let digest = sha256::Hash::hash(&data[..]);
 
@@ -36,6 +39,8 @@ fn handle_client(mut stream: TcpStream) {
     let path = String::from("/Users/kevinkelbie/Documents/GitHub/statechain-core/src/") + args.get(2).unwrap();
     let db = DB::open_default(path).unwrap();
     db.put(String::from(digest.to_hex()), &data[..]).unwrap();
+
+    stream.write(&data[..]).unwrap();
     
 }
 

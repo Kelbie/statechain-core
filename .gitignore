@@ -17,4 +17,5 @@ Cargo.lock
 /target
 #**/*.rs.bk
 
-db
+db*
+statechain*.conf
