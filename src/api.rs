@@ -14,15 +14,20 @@ extern crate ureq;
 
 use crossbeam_channel::{bounded, Sender};
 use json::JsonValue;
-use serde::{Serialize, Deserialize};
+// use serde::{Serialize, Deserialize};
 use std::io::prelude::*;
 
+use hdwallet::{KeyChain, DefaultKeyChain, ExtendedPrivKey, traits::Serialize};
+use hdwallet_bitcoin::{PrivKey, Network, PubKey};
+use secp256k1::key::PublicKey;
 
 use curv::BigInt;
 use curv::GE;
 use multi_party_schnorr;
 use hex;
 use curv::elliptic::curves::traits::*;
+
+use ring::hmac::{Context, Key, HMAC_SHA512};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct InitResponse {
@@ -110,7 +115,26 @@ pub fn getTransferById(transfer_id: web::Path<String>, req: HttpRequest, item: w
 
 
 pub fn init(req: HttpRequest, item: web::Json<InitMessage>) -> Result<web::Json<InitResponse>> {
-    println!("HTTP: {:?}", item);
+    let seed = "alcohol table author hen hope hint month fortune walnut gym sad taxi frame affair labor";
+    let master_key = ExtendedPrivKey::with_seed(&seed.as_bytes()).unwrap();
+    let key_chain = DefaultKeyChain::new(master_key);
+    let (extended_key, derivation) = key_chain.derive_private_key("m/1".into()).expect("derive ExtendedPrivKey");
+    println!("{:?} {:?}", extended_key, derivation);
+    let privkey = PrivKey {
+        network: Network::MainNet,
+        derivation: derivation,
+        extended_key,
+    };
+    let pubkey = PubKey::from_private_key(&privkey);
+
+
+    println!("{:?} {:?}", privkey.extended_key.private_key, pubkey.extended_key.public_key);
+
+    println!("123 {:?}", PublicKey::new());
+
+    // println!("HTTP: {:?}", item);
+
+    // println!("signing key: {:?}", signing_key);
 
     let initMessage = InitMessage {
         to: String::from(&item.to),
@@ -122,6 +146,8 @@ pub fn init(req: HttpRequest, item: web::Json<InitMessage>) -> Result<web::Json<
     // get sha256 digest of vector
     let digest = sha256::Hash::hash(encoded_init_message.as_ref());
 
+    println!("{}", digest);
+
     // save encoded message with digest as key
     let args: Vec<String> = env::args().collect();
     let path = String::from("/Users/kevinkelbie/Documents/GitHub/statechain-core/src/") + args.get(2).unwrap();
@@ -132,8 +158,8 @@ pub fn init(req: HttpRequest, item: web::Json<InitMessage>) -> Result<web::Json<
     send_to_peers(&encoded_init_message);
 
     let init_response = InitResponse {
-        public_key: String::from("public_key"),
-        server_ephemeral_key: String::from("server_ephemeral_key"),
+        public_key: String::from("awd"),
+        server_ephemeral_key: String::from("server_ephemeral_key2"),
         transfer_hash: String::from(digest.to_hex())
     };
 

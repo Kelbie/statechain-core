@@ -19,3 +19,4 @@ Cargo.lock
 
 db*
 statechain*.conf
+node_modules

@@ -40,10 +40,10 @@ fn main() {
     });
     
     // thread for peer-to-peer networking
-    let network_handle = thread::spawn(move || {
-        network::main();
-    });
+    // let network_handle = thread::spawn(move || {
+    //     network::main();
+    // });
 
     api_handle.join();
-    network_handle.join();
+    // network_handle.join();
 }
